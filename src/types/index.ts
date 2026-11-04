@@ -99,3 +99,15 @@ export interface ParsedWhatsAppOrder {
   notes: string;
   confidence: number;
 }
+
+export interface AuthCredentials {
+  email: string;
+  password: string;
+  updatedAt?: string;
+}
+
+export interface AuthSession {
+  isAuthenticated: boolean;
+  userEmail: string;
+  loggedAt: string;
+}

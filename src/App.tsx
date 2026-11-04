@@ -30,11 +30,20 @@ import { OrdersView } from './components/OrdersView.tsx';
 import { CatalogView } from './components/CatalogView.tsx';
 import { StickerGeneratorView } from './components/StickerGeneratorView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
+import { LoginView } from './components/LoginView.tsx';
+import { AuthSession } from './utils/auth.ts';
+import { supabase, isInviteOrRecoveryRedirect } from './utils/supabase.ts';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState<boolean>(true);
   const [currentTab, setCurrentTab] = useState<TabType>('home');
   const [period, setPeriod] = useState<PeriodFilter>('mensal');
+
+  // Supabase Auth Session
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
+  // True if user accessed via an invite or recovery link and must set their password
+  const [isPendingPasswordSetup, setIsPendingPasswordSetup] = useState<boolean>(() => isInviteOrRecoveryRedirect());
 
   // App Settings backed by LocalStorage
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
@@ -44,6 +53,48 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>(() => loadOrders());
   const [expenses, setExpenses] = useState<Expense[]>(() => loadExpenses());
   const [catalog, setCatalog] = useState<CatalogItem[]>(() => loadCatalog());
+
+  // Listen and persist Supabase Auth session across launches
+  useEffect(() => {
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session: supaSession } }) => {
+        if (supaSession?.user) {
+          setSession({
+            isAuthenticated: true,
+            userEmail: supaSession.user.email || '',
+            userId: supaSession.user.id,
+            loggedAt: new Date().toISOString(),
+          });
+        }
+        setAuthChecked(true);
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (event, supaSession) => {
+          if (event === 'PASSWORD_RECOVERY') {
+            setIsPendingPasswordSetup(true);
+          }
+
+          if (supaSession?.user) {
+            setSession({
+              isAuthenticated: true,
+              userEmail: supaSession.user.email || '',
+              userId: supaSession.user.id,
+              loggedAt: new Date().toISOString(),
+            });
+          } else {
+            setSession(null);
+          }
+        }
+      );
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    } else {
+      setAuthChecked(true);
+    }
+  }, []);
 
   // Check onboarding on initial launch
   useEffect(() => {
@@ -156,11 +207,22 @@ export default function App() {
       {/* Splash Screen on Launch */}
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
 
-      {/* Interactive Spotlight Presentation Tour */}
-      {showOnboarding && (
+      {/* Interactive Spotlight Presentation Tour (Only for authenticated user not in setup) */}
+      {showOnboarding && session?.isAuthenticated && !isPendingPasswordSetup && (
         <OnboardingHelper
           onComplete={handleFinishOnboarding}
           onNavigateTab={setCurrentTab}
+        />
+      )}
+
+      {/* Supabase Auth Gate: Requires authorized credentials or password creation on invite/recovery */}
+      {!showSplash && authChecked && (!session || !session.isAuthenticated || isPendingPasswordSetup) && (
+        <LoginView
+          forcePasswordSetup={isPendingPasswordSetup}
+          onLoginSuccess={(newSession) => {
+            setIsPendingPasswordSetup(false);
+            setSession(newSession);
+          }}
         />
       )}
 
@@ -226,11 +288,16 @@ export default function App() {
           {currentTab === 'configuracoes' && (
             <SettingsView
               settings={settings}
+              userEmail={session?.userEmail}
               onUpdateSettings={setSettings}
               onResetDatabaseToZero={handleResetDatabaseToZero}
               onRestoreSampleData={handleRestoreSampleData}
               onTriggerOnboarding={() => setShowOnboarding(true)}
               onClose={() => setCurrentTab('home')}
+              onLogout={() => {
+                setSession(null);
+                setCurrentTab('home');
+              }}
             />
           )}
         </main>

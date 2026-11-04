@@ -17,31 +17,57 @@ import {
   Music,
   ChevronRight,
   Info,
+  KeyRound,
+  Lock,
+  Eye,
+  EyeOff,
+  LogOut,
+  AlertCircle,
+  CheckCircle2,
+  Mail,
 } from 'lucide-react';
 import { AppSettings } from '../types/index.ts';
 import { soundManager } from '../utils/sound.ts';
 import { formatCurrencyInput } from '../utils/formatters.ts';
+import {
+  changeUserPassword,
+  logoutUser,
+  isSupabaseConfigured,
+} from '../utils/auth.ts';
 
 interface SettingsViewProps {
   settings: AppSettings;
+  userEmail?: string;
   onUpdateSettings: (newSettings: AppSettings) => void;
   onResetDatabaseToZero: () => void;
   onRestoreSampleData: () => void;
   onTriggerOnboarding: () => void;
   onClose: () => void;
+  onLogout?: () => void;
 }
 
-type SettingsTab = 'notificacoes' | 'apresentacao' | 'metas' | 'banco';
+type SettingsTab = 'notificacoes' | 'apresentacao' | 'metas' | 'banco' | 'senha';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
+  userEmail,
   onUpdateSettings,
   onResetDatabaseToZero,
   onRestoreSampleData,
   onTriggerOnboarding,
   onClose,
+  onLogout,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('notificacoes');
+
+  // Auth / Password change states with Supabase
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   // Form states
   const [daysBefore, setDaysBefore] = useState(settings.notificationDaysBefore);
@@ -118,6 +144,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2500);
+  };
+
+  // Change Password Handler with Supabase Auth
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (!newPassword.trim()) {
+      setPasswordError('Por favor, digite a nova senha.');
+      return;
+    }
+
+    if (newPassword.trim().length < 6) {
+      setPasswordError('A nova senha deve possuir no mínimo 6 caracteres.');
+      return;
+    }
+
+    if (newPassword.trim() !== confirmPassword.trim()) {
+      setPasswordError('A confirmação da nova senha não confere.');
+      return;
+    }
+
+    setIsSavingPassword(true);
+    const res = await changeUserPassword(newPassword.trim());
+    setIsSavingPassword(false);
+
+    if (res.success) {
+      setPasswordSuccess('Nova senha salva com sucesso no Supabase Auth!');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPasswordSuccess(null), 4000);
+    } else {
+      setPasswordError(res.error || 'Erro ao atualizar senha no Supabase.');
+    }
+  };
+
+  const handleLogoutClick = async () => {
+    await logoutUser();
+    onLogout?.();
   };
 
   return (
@@ -205,12 +271,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {/* Category Tabs (Flutter-style ListView Sections) */}
       <div className="bg-white p-1 rounded-2xl shadow-sm border border-slate-100">
-        <div className="grid grid-cols-4 gap-1 text-[11px]">
+        <div className="grid grid-cols-5 gap-1 text-[10px]">
           {[
-            { id: 'notificacoes', label: 'Notificações', icon: Bell },
+            { id: 'notificacoes', label: 'Notificaç.', icon: Bell },
             { id: 'apresentacao', label: 'Tutorial', icon: Sparkles },
             { id: 'metas', label: 'Metas', icon: Target },
             { id: 'banco', label: 'Dados', icon: ShieldCheck },
+            { id: 'senha', label: 'Senha', icon: KeyRound },
           ].map((tab) => {
             const Icon = tab.icon;
             const isSel = activeTab === tab.id;
@@ -570,6 +637,181 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <RotateCcw className="w-4 h-4 text-slate-500" />
                 <span>Restaurar Dados de Exemplo</span>
               </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Section 5: Senha & Segurança de Acesso */}
+      {activeTab === 'senha' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Section Header */}
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-7 h-7 rounded-lg bg-rose-50 text-[#FF4B93] flex items-center justify-center">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                Acesso & Senha
+              </h3>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Proteção e credenciais de entrada do seu aplicativo
+              </p>
+            </div>
+          </div>
+
+          {/* Card 1: Registered Account Email */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-pink-50 text-[#FF4B93] flex items-center justify-center">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Usuário Conectado
+                  </span>
+                  <span className="text-xs font-bold text-slate-800">
+                    {userEmail || 'contato@festacomalegria.com.br'}
+                  </span>
+                </div>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                isSupabaseConfigured
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                {isSupabaseConfigured ? 'Supabase Auth' : 'Auth Local'}
+              </span>
+            </div>
+
+            <div className="text-[11px] text-slate-500 pt-1">
+              Acesso exclusivo gerenciado pelo administrador. Novos membros são cadastrados por convite seguro.
+            </div>
+          </div>
+
+          {/* Card 2: Alterar Senha de Acesso no Supabase */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3.5">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-rose-50 text-[#FF4B93] flex items-center justify-center">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-800">
+                  Alterar Senha de Acesso
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Atualize sua senha criptografada no Supabase Auth
+                </p>
+              </div>
+            </div>
+
+            {/* Success Feedback */}
+            {passwordSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2.5 text-xs text-emerald-800 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span className="font-semibold">{passwordSuccess}</span>
+              </div>
+            )}
+
+            {/* Error Feedback */}
+            {passwordError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2.5 text-xs text-rose-700 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span className="font-semibold">{passwordError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-3 pt-1">
+              {/* Nova Senha */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Nova Senha
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    required
+                    className="w-full bg-slate-50 rounded-xl border border-slate-200 px-3.5 py-2.5 pr-10 text-xs text-slate-800 focus:outline-none focus:border-[#FF4B93] focus:ring-1 focus:ring-rose-200 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                    aria-label="Alternar exibição da senha"
+                  >
+                    {showNewPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirmar Nova Senha */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Confirmar Nova Senha
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPass ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repita a nova senha"
+                    required
+                    className="w-full bg-slate-50 rounded-xl border border-slate-200 px-3.5 py-2.5 pr-10 text-xs text-slate-800 focus:outline-none focus:border-[#FF4B93] focus:ring-1 focus:ring-rose-200 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPass(!showConfirmPass)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                    aria-label="Alternar exibição da senha"
+                  >
+                    {showConfirmPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isSavingPassword}
+                className="w-full min-h-[44px] mt-1 bg-gradient-to-r from-[#FF4B93] to-[#FF6B8B] hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-sm shadow-rose-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 transition-all disabled:opacity-70"
+              >
+                {isSavingPassword ? (
+                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Salvar Nova Senha</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* Card 3: Sessão & Logout */}
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="text-[11px] text-slate-600 leading-relaxed">
+                <strong className="text-slate-800 block mb-0.5">Sessão Segura & Persistente</strong>
+                Sua sessão é mantida com token seguro do Supabase no Safari / Vercel. Não há risco de perda de senha ou armazenamento em texto puro.
+              </div>
+            </div>
+
+            {onLogout && (
+              <div className="pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={handleLogoutClick}
+                  className="w-full min-h-[42px] bg-white hover:bg-rose-50 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 flex items-center justify-center gap-2 cursor-pointer active:scale-98 transition-all shadow-2xs"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sair da Conta (Desconectar)</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
