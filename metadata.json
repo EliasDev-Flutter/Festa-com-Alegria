@@ -1,0 +1,6 @@
+{
+  "name": "Ateliê Festa com alegria",
+  "description": "App mobile iOS exclusivo para gestão de festas, finanças, pedidos via WhatsApp, catálogo com fotos da galeria e figurinhas para o Ateliê Festa com alegria.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
