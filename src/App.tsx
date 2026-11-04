@@ -9,6 +9,7 @@ import {
   AppSettings,
 } from './types/index.ts';
 import {
+  DEFAULT_SETTINGS,
   loadOrders,
   saveOrders,
   loadExpenses,
@@ -31,7 +32,7 @@ import { CatalogView } from './components/CatalogView.tsx';
 import { StickerGeneratorView } from './components/StickerGeneratorView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
 import { LoginView } from './components/LoginView.tsx';
-import { AuthSession } from './utils/auth.ts';
+import { AuthSession, logoutUser } from './utils/auth.ts';
 import { supabase, isInviteOrRecoveryRedirect } from './utils/supabase.ts';
 
 export default function App() {
@@ -39,20 +40,19 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<TabType>('home');
   const [period, setPeriod] = useState<PeriodFilter>('mensal');
 
-  // Supabase Auth Session
+  // Supabase Auth Session (Luciara's login, invites & recovery)
   const [session, setSession] = useState<AuthSession | null>(null);
   const [authChecked, setAuthChecked] = useState<boolean>(false);
   // True if user accessed via an invite or recovery link and must set their password
   const [isPendingPasswordSetup, setIsPendingPasswordSetup] = useState<boolean>(() => isInviteOrRecoveryRedirect());
 
-  // App Settings backed by LocalStorage
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
-  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
-
-  // Core Data State backed by LocalStorage
+  // Core Data State backed directly by local storage
   const [orders, setOrders] = useState<Order[]>(() => loadOrders());
   const [expenses, setExpenses] = useState<Expense[]>(() => loadExpenses());
   const [catalog, setCatalog] = useState<CatalogItem[]>(() => loadCatalog());
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
 
   // Listen and persist Supabase Auth session across launches
   useEffect(() => {
@@ -98,31 +98,13 @@ export default function App() {
 
   // Check onboarding on initial launch
   useEffect(() => {
-    if (!settings.hasSeenOnboarding) {
-      // Trigger onboarding helper after splash finishes
+    if (!settings.hasSeenOnboarding && session?.isAuthenticated) {
       const timer = setTimeout(() => {
         setShowOnboarding(true);
       }, 2300);
       return () => clearTimeout(timer);
     }
-  }, [settings.hasSeenOnboarding]);
-
-  // Synchronize to localStorage when state updates
-  useEffect(() => {
-    saveOrders(orders);
-  }, [orders]);
-
-  useEffect(() => {
-    saveExpenses(expenses);
-  }, [expenses]);
-
-  useEffect(() => {
-    saveCatalog(catalog);
-  }, [catalog]);
-
-  useEffect(() => {
-    saveSettings(settings);
-  }, [settings]);
+  }, [settings.hasSeenOnboarding, session?.isAuthenticated]);
 
   // Actions: Add Order
   const handleAddOrder = (newOrderData: Omit<Order, 'id' | 'createdAt'>) => {
@@ -131,19 +113,23 @@ export default function App() {
       id: `ord-${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
-    setOrders((prev) => [newOrder, ...prev]);
+    const updated = [newOrder, ...orders];
+    setOrders(updated);
+    saveOrders(updated);
   };
 
   // Actions: Update Order Status
   const handleUpdateOrderStatus = (id: string, newStatus: OrderStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o))
-    );
+    const updated = orders.map((o) => (o.id === id ? { ...o, status: newStatus } : o));
+    setOrders(updated);
+    saveOrders(updated);
   };
 
   // Actions: Delete Order
   const handleDeleteOrder = (id: string) => {
-    setOrders((prev) => prev.filter((o) => o.id !== id));
+    const updated = orders.filter((o) => o.id !== id);
+    setOrders(updated);
+    saveOrders(updated);
   };
 
   // Actions: Add Expense
@@ -152,47 +138,70 @@ export default function App() {
       ...newExpData,
       id: `exp-${Date.now()}`,
     };
-    setExpenses((prev) => [newExp, ...prev]);
+    const updated = [newExp, ...expenses];
+    setExpenses(updated);
+    saveExpenses(updated);
   };
 
   // Actions: Delete Expense
   const handleDeleteExpense = (id: string) => {
-    setExpenses((prev) => prev.filter((e) => e.id !== id));
+    const updated = expenses.filter((e) => e.id !== id);
+    setExpenses(updated);
+    saveExpenses(updated);
   };
 
-  // Actions: Add Catalog Item from iPhone Photo Gallery or Manual Entry
+  // Actions: Add Catalog Item
   const handleAddCatalogItem = (newItemData: Omit<CatalogItem, 'id'>) => {
     const newItem: CatalogItem = {
       ...newItemData,
       id: `cat-${Date.now()}`,
     };
-    setCatalog((prev) => [newItem, ...prev]);
+    const updated = [newItem, ...catalog];
+    setCatalog(updated);
+    saveCatalog(updated);
   };
 
   const handleDeleteCatalogItem = (id: string) => {
-    setCatalog((prev) => prev.filter((c) => c.id !== id));
+    const updated = catalog.filter((c) => c.id !== id);
+    setCatalog(updated);
+    saveCatalog(updated);
+  };
+
+  // Actions: Update Settings
+  const handleUpdateSettings = (newSettings: AppSettings) => {
+    setSettings(newSettings);
+    saveSettings(newSettings);
   };
 
   // Actions: Reset Database to Zero
   const handleResetDatabaseToZero = () => {
-    const empty = resetDatabaseToZero();
-    setOrders(empty.orders);
-    setExpenses(empty.expenses);
-    setCatalog(empty.catalog);
+    const result = resetDatabaseToZero();
+    setOrders(result.orders);
+    setExpenses(result.expenses);
+    setCatalog(result.catalog);
   };
 
   // Actions: Restore Sample Data
   const handleRestoreSampleData = () => {
-    const sample = restoreSampleData();
-    setOrders(sample.orders);
-    setExpenses(sample.expenses);
-    setCatalog(sample.catalog);
+    const result = restoreSampleData();
+    setOrders(result.orders);
+    setExpenses(result.expenses);
+    setCatalog(result.catalog);
   };
 
   // Actions: Finish Onboarding
   const handleFinishOnboarding = () => {
     setShowOnboarding(false);
-    setSettings((prev) => ({ ...prev, hasSeenOnboarding: true }));
+    const updated = { ...settings, hasSeenOnboarding: true };
+    setSettings(updated);
+    saveSettings(updated);
+  };
+
+  // Actions: Logout
+  const handleLogout = async () => {
+    await logoutUser();
+    setSession(null);
+    setCurrentTab('home');
   };
 
   // Count active / upcoming parties
@@ -289,15 +298,12 @@ export default function App() {
             <SettingsView
               settings={settings}
               userEmail={session?.userEmail}
-              onUpdateSettings={setSettings}
+              onUpdateSettings={handleUpdateSettings}
               onResetDatabaseToZero={handleResetDatabaseToZero}
               onRestoreSampleData={handleRestoreSampleData}
               onTriggerOnboarding={() => setShowOnboarding(true)}
               onClose={() => setCurrentTab('home')}
-              onLogout={() => {
-                setSession(null);
-                setCurrentTab('home');
-              }}
+              onLogout={handleLogout}
             />
           )}
         </main>
