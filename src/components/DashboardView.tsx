@@ -14,7 +14,7 @@ import {
   Sparkle,
 } from 'lucide-react';
 import { Order, Expense, PeriodFilter, TabType, AppSettings } from '../types/index.ts';
-import { calculateFinancialSummary, formatBRL } from '../utils/finance.ts';
+import { calculateFinancialSummary, formatBRL, getPaymentBadge } from '../utils/finance.ts';
 
 interface DashboardViewProps {
   orders: Order[];
@@ -25,6 +25,7 @@ interface DashboardViewProps {
   onNavigateTab: (tab: TabType) => void;
   onNewOrder: () => void;
   onNewExpense: () => void;
+  onOpenFinanceDetail?: (detail: 'lucro' | 'receita' | 'gastos') => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -36,6 +37,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateTab,
   onNewOrder,
   onNewExpense,
+  onOpenFinanceDetail,
 }) => {
   const summary = calculateFinancialSummary(orders, expenses, period);
 
@@ -164,29 +166,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
 
-          <div className="mt-3">
-            <h2 className="text-3xl font-black tracking-tight text-slate-900 tabular-nums">
-              {formatBRL(summary.netProfit)}
-            </h2>
-            <p className="text-xs text-slate-600 mt-1 font-medium">
-              Considerando faturamento de festas ativas menos gastos com materiais.
+          <div
+            onClick={() => {
+              onOpenFinanceDetail?.('lucro');
+              onNavigateTab('financas');
+            }}
+            className="mt-3 cursor-pointer group"
+          >
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-3xl font-black tracking-tight text-slate-900 tabular-nums group-hover:text-[#FF4B93] transition-colors">
+                {formatBRL(summary.netProfit)}
+              </h2>
+            </div>
+            <p className="text-xs text-slate-600 mt-1 font-medium flex items-center justify-between">
+              <span>Considerando faturamento de festas ativas menos gastos.</span>
+              <span className="text-[10px] font-bold text-[#FF4B93] opacity-80 group-hover:opacity-100 underline decoration-rose-300">
+                Ver detalhes →
+              </span>
             </p>
           </div>
 
-          {/* Quick Metrics Bar inside Hero */}
+          {/* Quick Metrics Bar inside Hero: Clicar em Faturamento abre Lucro, clicar em Gastos abre Gastos */}
           <div className="mt-4 pt-3 border-t border-rose-200/60 grid grid-cols-2 gap-3 text-xs">
-            <div className="bg-white/70 backdrop-blur-xs rounded-xl p-2.5">
-              <span className="text-slate-500 text-[11px] block">Faturamento</span>
-              <span className="font-bold text-slate-800 text-sm tabular-nums">
+            <button
+              type="button"
+              onClick={() => {
+                onOpenFinanceDetail?.('lucro');
+                onNavigateTab('financas');
+              }}
+              className="bg-white/80 hover:bg-white text-left backdrop-blur-xs rounded-xl p-2.5 transition-all cursor-pointer active:scale-95 shadow-xs border border-white/60 group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 text-[11px] block font-semibold">Faturamento</span>
+                <span className="text-[10px] text-[#FF4B93] font-bold">Ver Lucro →</span>
+              </div>
+              <span className="font-extrabold text-slate-800 text-sm tabular-nums block mt-0.5 group-hover:text-[#FF4B93] transition-colors">
                 {formatBRL(summary.revenue)}
               </span>
-            </div>
-            <div className="bg-white/70 backdrop-blur-xs rounded-xl p-2.5">
-              <span className="text-slate-500 text-[11px] block">Gastos Materiais</span>
-              <span className="font-bold text-rose-700 text-sm tabular-nums">
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onOpenFinanceDetail?.('gastos');
+                onNavigateTab('financas');
+              }}
+              className="bg-white/80 hover:bg-white text-left backdrop-blur-xs rounded-xl p-2.5 transition-all cursor-pointer active:scale-95 shadow-xs border border-white/60 group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 text-[11px] block font-semibold">Gastos Materiais</span>
+                <span className="text-[10px] text-rose-600 font-bold">Ver Gastos →</span>
+              </div>
+              <span className="font-extrabold text-rose-700 text-sm tabular-nums block mt-0.5 group-hover:text-rose-800 transition-colors">
                 {formatBRL(summary.expenses)}
               </span>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -308,6 +342,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="space-y-2.5">
             {upcomingOrders.map((order) => {
               const badge = getStatusBadge(order.status);
+              const payBadge = getPaymentBadge(order);
               const diff = getDiffDays(order.partyDate);
               const daysLeft = getDaysRemainingText(diff);
 
@@ -319,10 +354,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badge.bg}`}>
                           {badge.label}
                         </span>
+                        {order.paymentMethod && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${payBadge.colorClass}`}>
+                            {payBadge.label}
+                          </span>
+                        )}
                         <span className="text-[11px] font-bold text-[#FF4B93] flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {daysLeft}

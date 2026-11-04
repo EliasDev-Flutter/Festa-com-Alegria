@@ -21,6 +21,7 @@ import {
   CATEGORY_LABELS,
   CATEGORY_COLORS,
   isDateInPeriod,
+  getPaymentBadge,
 } from '../utils/finance.ts';
 
 interface FinanceViewProps {
@@ -30,6 +31,8 @@ interface FinanceViewProps {
   onPeriodChange: (p: PeriodFilter) => void;
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
   onDeleteExpense: (id: string) => void;
+  initialKpiDetail?: KpiDetailType;
+  onClearInitialKpiDetail?: () => void;
 }
 
 type KpiDetailType = 'receita' | 'gastos' | 'lucro' | null;
@@ -41,6 +44,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onPeriodChange,
   onAddExpense,
   onDeleteExpense,
+  initialKpiDetail = null,
+  onClearInitialKpiDetail,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [description, setDescription] = useState('');
@@ -49,8 +54,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
 
-  // Active detail balloon modal when holding/clicking a KPI card
-  const [activeKpiDetail, setActiveKpiDetail] = useState<KpiDetailType>(null);
+  // Active detail balloon modal when holding/clicking a KPI card or navigated from Home
+  const [activeKpiDetail, setActiveKpiDetail] = useState<KpiDetailType>(initialKpiDetail);
+
+  // Sync if initialKpiDetail changes from outside
+  React.useEffect(() => {
+    if (initialKpiDetail) {
+      setActiveKpiDetail(initialKpiDetail);
+    }
+  }, [initialKpiDetail]);
 
   const summary = calculateFinancialSummary(orders, expenses, period);
 
@@ -212,7 +224,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </div>
 
               <button
-                onClick={() => setActiveKpiDetail(null)}
+                onClick={() => {
+                  setActiveKpiDetail(null);
+                  onClearInitialKpiDetail?.();
+                }}
                 className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -244,31 +259,41 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     </p>
                   ) : (
                     <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                      {periodOrders.map((order) => (
-                        <div
-                          key={order.id}
-                          className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-center justify-between gap-2"
-                        >
-                          <div>
-                            <h4 className="text-xs font-bold text-slate-800 leading-snug">
-                              {order.theme}
-                            </h4>
-                            <p className="text-[11px] text-slate-500">
-                              {order.clientName}
-                            </p>
-                            <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                              <Calendar className="w-3 h-3 text-emerald-500" />
-                              {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(
-                                new Date(order.partyDate + 'T00:00:00')
-                              )}
-                              {order.partyTime && ` às ${order.partyTime}h`}
+                      {periodOrders.map((order) => {
+                        const payBadge = getPaymentBadge(order);
+                        return (
+                          <div
+                            key={order.id}
+                            className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs font-bold text-slate-800 leading-snug truncate">
+                                {order.theme}
+                              </h4>
+                              <p className="text-[11px] text-slate-500 truncate">
+                                {order.clientName}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                                  <Calendar className="w-3 h-3 text-emerald-500" />
+                                  {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(
+                                    new Date(order.partyDate + 'T00:00:00')
+                                  )}
+                                  {order.partyTime && ` · ${order.partyTime}h`}
+                                </span>
+                                {order.paymentMethod && (
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${payBadge.colorClass}`}>
+                                    {payBadge.label}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-xs font-black text-emerald-700 tabular-nums shrink-0">
+                              {formatBRL(order.value)}
                             </span>
                           </div>
-                          <span className="text-xs font-black text-emerald-700 tabular-nums shrink-0">
-                            {formatBRL(order.value)}
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

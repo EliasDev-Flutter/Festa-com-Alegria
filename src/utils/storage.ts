@@ -24,6 +24,7 @@ export const SAMPLE_ORDERS: Order[] = [
     value: 2350,
     materialCost: 580,
     status: 'confirmado',
+    paymentMethod: 'pix',
     notes: 'Painel curvo lavanda e rosa, borboleta 3D, número 1 gigante e cilindros canelados.',
     createdAt: '2026-11-01T10:00:00Z',
   },
@@ -38,6 +39,8 @@ export const SAMPLE_ORDERS: Order[] = [
     value: 2600,
     materialCost: 680,
     status: 'em_preparacao',
+    paymentMethod: 'cartao_credito',
+    installments: 3,
     notes: 'Personagem Bluey, número 2 iluminado, balões candy blue e peach.',
     createdAt: '2026-11-02T14:30:00Z',
   },
@@ -52,6 +55,11 @@ export const SAMPLE_ORDERS: Order[] = [
     value: 950,
     materialCost: 180,
     status: 'confirmado',
+    paymentMethod: 'cinquenta_porcento',
+    splitMonths: {
+      firstMonth: 'Novembro',
+      secondMonth: 'Dezembro',
+    },
     notes: 'Trio cilindros dourados, 2 arcos de ferro e capas personalizadas.',
     createdAt: '2026-11-03T09:15:00Z',
   },
@@ -66,6 +74,7 @@ export const SAMPLE_ORDERS: Order[] = [
     value: 3200,
     materialCost: 850,
     status: 'orcamento',
+    paymentMethod: 'a_vista',
     notes: 'Painel duplo curvo, arranjos de flores nobres e mesa de doces finos.',
     createdAt: '2026-11-03T16:00:00Z',
   },
@@ -78,9 +87,10 @@ export const SAMPLE_ORDERS: Order[] = [
     theme: 'Mundo Safari dos Pequenos',
     location: 'Buffet Villa Encantada',
     value: 2800,
-    materialCost: 720,
+    materialCost: 750,
     status: 'concluido',
-    notes: 'Entregue com sucesso! Cliente elogiou muito o arco de balões.',
+    paymentMethod: 'boleto',
+    notes: 'Arco desconstruído verde e laranja com bichinhos de pelúcia.',
     createdAt: '2026-10-15T11:00:00Z',
   },
 ];
@@ -223,7 +233,24 @@ export function loadOrders(): Order[] {
       }
       return [];
     }
-    return JSON.parse(raw);
+    const parsed: Order[] = JSON.parse(raw);
+    const enriched = parsed.map((o) => {
+      if (o.paymentMethod) return o;
+      const sample = SAMPLE_ORDERS.find((s) => s.id === o.id);
+      if (sample && sample.paymentMethod) {
+        return {
+          ...o,
+          paymentMethod: sample.paymentMethod,
+          installments: sample.installments,
+          splitMonths: sample.splitMonths,
+        };
+      }
+      return {
+        ...o,
+        paymentMethod: 'pix' as const,
+      };
+    });
+    return enriched;
   } catch {
     return [];
   }

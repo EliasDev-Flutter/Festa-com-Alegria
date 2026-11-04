@@ -156,6 +156,44 @@ export function parseWhatsAppMessage(rawText: string): ParsedWhatsAppOrder {
   }
   notes = notesMatches.join(' · ');
 
+  // 7. Payment method extraction
+  let paymentMethod: any = undefined;
+  let installments: number | undefined = undefined;
+  let splitMonths: any = undefined;
+
+  if (/pix/i.test(text)) {
+    paymentMethod = 'pix';
+  } else if (/cart[ãa]o/i.test(text) || /parcelad[ao]/i.test(text) || /\b(?:[1-9]|1[0-2])\s*x\b/i.test(text)) {
+    paymentMethod = 'cartao_credito';
+    const instMatch = text.match(/\b([1-9]|1[0-2])\s*x\b/i) || text.match(/(?:em|de)\s*([1-9]|1[0-2])\s*(?:vezes|parcelas)/i);
+    if (instMatch) {
+      installments = parseInt(instMatch[1], 10);
+    } else {
+      installments = 1;
+    }
+  } else if (/d[ée]bito/i.test(text)) {
+    paymentMethod = 'debito';
+  } else if (/boleto/i.test(text)) {
+    paymentMethod = 'boleto';
+  } else if (/50%|metade|sinal/i.test(text)) {
+    paymentMethod = 'cinquenta_porcento';
+    const monthsFound = text.match(/(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/gi);
+    if (monthsFound && monthsFound.length >= 2) {
+      const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+      splitMonths = {
+        firstMonth: cap(monthsFound[0]),
+        secondMonth: cap(monthsFound[1]),
+      };
+    } else {
+      splitMonths = {
+        firstMonth: 'Novembro',
+        secondMonth: 'Dezembro',
+      };
+    }
+  } else if (/[àa]\s*vista|dinheiro/i.test(text)) {
+    paymentMethod = 'a_vista';
+  }
+
   // Compute confidence (0 to 1) based on extracted core fields
   let found = 0;
   if (clientName) found++;
@@ -172,6 +210,9 @@ export function parseWhatsAppMessage(rawText: string): ParsedWhatsAppOrder {
     location,
     value,
     clientPhone,
+    paymentMethod,
+    installments,
+    splitMonths,
     notes,
     confidence,
   };

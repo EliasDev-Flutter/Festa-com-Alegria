@@ -11,10 +11,11 @@ import {
   ArrowRight,
   ClipboardCopy,
   Plus,
+  CreditCard,
 } from 'lucide-react';
-import { Order, OrderStatus } from '../types/index.ts';
+import { Order, OrderStatus, PaymentMethod, SplitMonthsPayment } from '../types/index.ts';
 import { parseWhatsAppMessage } from '../utils/orderParser.ts';
-import { formatBRL } from '../utils/finance.ts';
+import { formatBRL, getPaymentBadge, PAYMENT_METHOD_LABELS, MONTH_OPTIONS } from '../utils/finance.ts';
 import {
   formatCurrencyInput,
   formatDateInput,
@@ -50,10 +51,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     location: string;
     value: number;
     clientPhone: string;
+    paymentMethod?: PaymentMethod;
+    installments?: number;
+    splitMonths?: SplitMonthsPayment;
     notes: string;
   } | null>(null);
 
-  // Manual Form State with Formatters
+  // Manual Form State with Formatters & Payment
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [partyDateDisplay, setPartyDateDisplay] = useState(''); // DD/MM/AAAA
@@ -65,22 +69,26 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const [materialCostDisplay, setMaterialCostDisplay] = useState(''); // R$ 0,00
   const [materialCostNumeric, setMaterialCostNumeric] = useState(0);
   const [status, setStatus] = useState<OrderStatus>('confirmado');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [installments, setInstallments] = useState<number>(1);
+  const [splitFirstMonth, setSplitFirstMonth] = useState<string>('Novembro');
+  const [splitSecondMonth, setSplitSecondMonth] = useState<string>('Dezembro');
   const [notes, setNotes] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Sample presets for quick testing
+  // Sample presets with realistic payment options for quick testing
   const presets = [
     {
-      title: 'WhatsApp 1 (Jardim)',
-      text: 'Oi boa tarde! Gostaria de fechar a decoração pro aniversário da Sophia no dia 18/11/2026 às 15:00 horas. O tema vai ser Jardim Encantado no buffet Splash Kids. Ficou R$ 1.850 com o arco de balões desconstruído né?',
+      title: 'WhatsApp 1 (PIX)',
+      text: 'Oi boa tarde! Gostaria de fechar a decoração pro aniversário da Sophia no dia 18/11/2026 às 15:00 horas. O tema vai ser Jardim Encantado no buffet Splash Kids. Ficou R$ 1.850 com o arco de balões desconstruído né? Vou pagar via PIX.',
     },
     {
-      title: 'WhatsApp 2 (Safari)',
-      text: 'Olá! Sou a Fernanda, quero reservar pro meu filho Oliver pro dia 21/11/2026 às 14:00 horas. Decoração tema Safari com letreiro 3 iluminado no Espaço Granja Viana. Fechamos em R$ 2.800! Meu tel é (11) 97120-4499.',
+      title: 'WhatsApp 2 (Cartão 3x)',
+      text: 'Olá! Sou a Fernanda, quero reservar pro meu filho Oliver pro dia 21/11/2026 às 14:00 horas. Decoração tema Safari com letreiro 3 iluminado no Espaço Granja Viana. Fechamos em R$ 2.800! Vou passar no cartão de crédito em 3x. Meu tel é (11) 97120-4499.',
     },
     {
-      title: 'WhatsApp 3 (Pegue e Monte)',
-      text: 'Oi! Aqui é a Renata. Quero fechar o Kit Pegue e Monte de cilindros dourados pro dia 28/11/2026 às 11h. Retirada no ateliê. Valor R$ 950,00 né?',
+      title: 'WhatsApp 3 (50% Nov/Dez)',
+      text: 'Oi! Aqui é a Renata. Quero fechar o Kit Pegue e Monte de cilindros dourados pro dia 28/11/2026 às 11h. Retirada no ateliê. Valor R$ 950,00 né? Posso pagar 50% de entrada em novembro e 50% em dezembro?',
     },
   ];
 
@@ -89,6 +97,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     const parsed = parseWhatsAppMessage(rawText);
 
     const detectedTime = parsed.partyTime || '14:00';
+    const detectedPayment = parsed.paymentMethod || 'pix';
+    const detectedInstallments = parsed.installments || 1;
+    const detectedSplit = parsed.splitMonths || { firstMonth: 'Novembro', secondMonth: 'Dezembro' };
 
     setExtractedPreview({
       clientName: parsed.clientName || 'Cliente WhatsApp',
@@ -98,6 +109,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
       location: parsed.location || 'Local a definir',
       value: parsed.value || 1500,
       clientPhone: parsed.clientPhone || '',
+      paymentMethod: detectedPayment,
+      installments: detectedInstallments,
+      splitMonths: detectedSplit,
       notes: parsed.notes || '',
     });
 
@@ -120,6 +134,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     }
     if (parsed.clientPhone) setClientPhone(formatPhoneInput(parsed.clientPhone));
     if (parsed.notes) setNotes(parsed.notes);
+    if (parsed.paymentMethod) setPaymentMethod(parsed.paymentMethod);
+    if (parsed.installments) setInstallments(parsed.installments);
+    if (parsed.splitMonths) {
+      if (parsed.splitMonths.firstMonth) setSplitFirstMonth(parsed.splitMonths.firstMonth);
+      if (parsed.splitMonths.secondMonth) setSplitSecondMonth(parsed.splitMonths.secondMonth);
+    }
   };
 
   const handleTransferToManual = () => {
@@ -144,6 +164,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
       value: finalVal,
       materialCost: finalCost,
       status,
+      paymentMethod,
+      installments: paymentMethod === 'cartao_credito' ? installments : undefined,
+      splitMonths: paymentMethod === 'cinquenta_porcento' ? {
+        firstMonth: splitFirstMonth,
+        secondMonth: splitSecondMonth,
+      } : undefined,
       notes: notes.trim() || undefined,
     });
 
@@ -161,6 +187,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     setValueNumeric(0);
     setMaterialCostDisplay('');
     setMaterialCostNumeric(0);
+    setPaymentMethod('pix');
+    setInstallments(1);
+    setSplitFirstMonth('Novembro');
+    setSplitSecondMonth('Dezembro');
     setNotes('');
     setRawText('');
     setExtractedPreview(null);
@@ -318,6 +348,25 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   <span className="text-slate-400 text-[10px] uppercase font-bold block">Local / Buffet</span>
                   <span className="font-semibold text-slate-800 truncate block">
                     {extractedPreview.location}
+                  </span>
+                </div>
+
+                <div className="bg-white/80 p-2.5 rounded-xl border border-rose-100 col-span-2 flex items-center justify-between">
+                  <div>
+                    <span className="text-slate-400 text-[10px] uppercase font-bold block">Pagamento Identificado</span>
+                    <span className="font-semibold text-slate-800 flex items-center gap-1.5 mt-0.5">
+                      <CreditCard className="w-3.5 h-3.5 text-[#FF4B93]" />
+                      {PAYMENT_METHOD_LABELS[extractedPreview.paymentMethod || 'pix']}
+                      {extractedPreview.paymentMethod === 'cartao_credito' && (
+                        <span className="text-indigo-600 font-bold">({extractedPreview.installments || 1}x de {formatBRL(extractedPreview.value / (extractedPreview.installments || 1))})</span>
+                      )}
+                      {extractedPreview.paymentMethod === 'cinquenta_porcento' && extractedPreview.splitMonths && (
+                        <span className="text-purple-600 font-bold">({extractedPreview.splitMonths.firstMonth} & {extractedPreview.splitMonths.secondMonth})</span>
+                      )}
+                    </span>
+                  </div>
+                  <span className="text-[10px] bg-rose-50 text-[#FF4B93] px-2 py-0.5 rounded-md font-bold border border-rose-100">
+                    Auto-detectado
                   </span>
                 </div>
               </div>
@@ -507,6 +556,135 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             </select>
           </div>
 
+          {/* Opção de Pagamento Escolhida pelo Cliente */}
+          <div className="bg-slate-50/90 rounded-2xl p-3.5 border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-[#FF4B93]" />
+                Forma de Pagamento Escolhida *
+              </label>
+              <span className="text-[10px] font-bold text-[#FF4B93] bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                {PAYMENT_METHOD_LABELS[paymentMethod]}
+              </span>
+            </div>
+
+            {/* Grid com as opções solicitadas: Cartão de Crédito, Débito, PIX, Boleto, 50%, À vista */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { id: 'cartao_credito', label: 'Cartão Crédito', icon: '💳' },
+                { id: 'debito', label: 'Débito', icon: '🏦' },
+                { id: 'pix', label: 'PIX', icon: '💠' },
+                { id: 'boleto', label: 'Boleto', icon: '📄' },
+                { id: 'cinquenta_porcento', label: '50% Entrada', icon: '🌓' },
+                { id: 'a_vista', label: 'À vista', icon: '💵' },
+              ].map((opt) => {
+                const isSel = paymentMethod === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPaymentMethod(opt.id as PaymentMethod)}
+                    className={`min-h-[46px] px-2 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 text-center ${
+                      isSel
+                        ? 'bg-[#FF4B93] text-white border-[#FF4B93] shadow-xs scale-[1.02]'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-xs">{opt.icon}</span>
+                    <span className="text-[11px] leading-tight">{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Se for Cartão de Crédito: Perguntar Número de Parcelas */}
+            {paymentMethod === 'cartao_credito' && (
+              <div className="bg-white rounded-xl p-3 border border-indigo-100 space-y-2 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Número de Parcelas do Cartão:
+                  </label>
+                  <span className="text-xs font-extrabold text-indigo-700">
+                    {installments}x
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+                  {[1, 2, 3, 4, 5, 6, 8, 10, 12].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setInstallments(num)}
+                      className={`min-h-[36px] rounded-lg text-xs font-bold border cursor-pointer transition-all ${
+                        installments === num
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {num}x
+                    </button>
+                  ))}
+                </div>
+                {valueNumeric > 0 && (
+                  <div className="bg-indigo-50/70 rounded-lg p-2 text-[11px] font-semibold text-indigo-900 flex items-center justify-between">
+                    <span>Valor por parcela:</span>
+                    <span className="font-bold">{installments}x de {formatBRL(valueNumeric / installments)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Se for 50%: Perguntar quais meses serão pagos */}
+            {paymentMethod === 'cinquenta_porcento' && (
+              <div className="bg-white rounded-xl p-3 border border-purple-100 space-y-2.5 animate-in fade-in duration-150">
+                <span className="block text-xs font-bold text-slate-700">
+                  Quais meses serão pagos os 50%?
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      1º Mês (Entrada 50%)
+                    </label>
+                    <select
+                      value={splitFirstMonth}
+                      onChange={(e) => setSplitFirstMonth(e.target.value)}
+                      className="w-full h-10 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold"
+                    >
+                      {MONTH_OPTIONS.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      2º Mês (Restante 50%)
+                    </label>
+                    <select
+                      value={splitSecondMonth}
+                      onChange={(e) => setSplitSecondMonth(e.target.value)}
+                      className="w-full h-10 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-semibold"
+                    >
+                      {MONTH_OPTIONS.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {valueNumeric > 0 && (
+                  <div className="bg-purple-50/70 rounded-lg p-2 text-[11px] text-purple-950 font-medium space-y-0.5 border border-purple-100">
+                    <p className="flex justify-between">
+                      <span>• 50% Entrada ({splitFirstMonth}):</span>
+                      <strong>{formatBRL(valueNumeric / 2)}</strong>
+                    </p>
+                    <p className="flex justify-between">
+                      <span>• 50% Restante ({splitSecondMonth}):</span>
+                      <strong>{formatBRL(valueNumeric / 2)}</strong>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
               Observações & Itens Especiais
@@ -581,6 +759,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
           <div className="space-y-3">
             {filteredOrders.map((order) => {
               const badge = getStatusBadge(order.status);
+              const payBadge = getPaymentBadge(order);
 
               return (
                 <div
@@ -589,10 +768,15 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badge.bg}`}>
                           {badge.label}
                         </span>
+                        {order.paymentMethod && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${payBadge.colorClass}`}>
+                            {payBadge.label}
+                          </span>
+                        )}
                         <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
                           <Clock className="w-3 h-3 text-[#FF4B93]" />
                           {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(
@@ -619,7 +803,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-xs text-slate-500 space-y-1 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100/70">
+                  <div className="text-xs text-slate-500 space-y-1.5 bg-slate-50/70 p-2.5 rounded-xl border border-slate-100/70">
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <span className="truncate">{order.location || 'Local a definir'}</span>
@@ -628,6 +812,21 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                       <div className="flex items-center gap-1.5 text-slate-600 font-medium">
                         <Clock className="w-3.5 h-3.5 text-[#FF4B93] shrink-0" />
                         <span>Horário da festa: {order.partyTime} horas</span>
+                      </div>
+                    )}
+                    {/* Payment details */}
+                    {order.paymentMethod && (
+                      <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                        <CreditCard className="w-3.5 h-3.5 text-[#FF4B93] shrink-0" />
+                        <span>
+                          Pagamento: <strong>{PAYMENT_METHOD_LABELS[order.paymentMethod] || order.paymentMethod}</strong>
+                          {order.paymentMethod === 'cartao_credito' && order.installments && (
+                            <span className="text-indigo-600 font-bold"> ({order.installments}x de {formatBRL(order.value / order.installments)})</span>
+                          )}
+                          {order.paymentMethod === 'cinquenta_porcento' && order.splitMonths && (
+                            <span className="text-purple-600 font-bold"> ({formatBRL(order.value / 2)} em {order.splitMonths.firstMonth} + {formatBRL(order.value / 2)} em {order.splitMonths.secondMonth})</span>
+                          )}
+                        </span>
                       </div>
                     )}
                     {order.clientPhone && (

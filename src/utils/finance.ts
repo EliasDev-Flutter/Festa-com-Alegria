@@ -117,3 +117,91 @@ export function calculateFinancialSummary(
     categoryExpenses,
   };
 }
+
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cartao_credito: 'Cartão de Crédito',
+  debito: 'Débito',
+  pix: 'PIX',
+  boleto: 'Boleto',
+  cinquenta_porcento: '50% Entrada',
+  a_vista: 'À vista',
+};
+
+export const MONTH_OPTIONS = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
+
+export function getPaymentBadge(order: {
+  paymentMethod?: string;
+  installments?: number;
+  splitMonths?: { firstMonth?: string; secondMonth?: string };
+}): { label: string; details?: string; colorClass: string } {
+  if (!order.paymentMethod) {
+    return {
+      label: 'A Definir',
+      colorClass: 'bg-slate-50 text-slate-500 border-slate-200',
+    };
+  }
+
+  switch (order.paymentMethod) {
+    case 'cartao_credito': {
+      const inst = order.installments || 1;
+      return {
+        label: `Cartão ${inst}x`,
+        details: `${inst}x parcelado`,
+        colorClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      };
+    }
+    case 'pix':
+      return {
+        label: 'PIX',
+        details: 'Instantâneo',
+        colorClass: 'bg-teal-50 text-teal-700 border-teal-200',
+      };
+    case 'cinquenta_porcento': {
+      const m1 = order.splitMonths?.firstMonth || '';
+      const m2 = order.splitMonths?.secondMonth || '';
+      const monthText = m1 && m2 ? `${m1.slice(0, 3)}/${m2.slice(0, 3)}` : '2x meses';
+      return {
+        label: `50% (${monthText})`,
+        details: m1 && m2 ? `${m1} & ${m2}` : '50% entrada + restante',
+        colorClass: 'bg-purple-50 text-purple-700 border-purple-200',
+      };
+    }
+    case 'debito':
+      return {
+        label: 'Débito',
+        details: 'À vista',
+        colorClass: 'bg-blue-50 text-blue-700 border-blue-200',
+      };
+    case 'boleto':
+      return {
+        label: 'Boleto',
+        details: 'Bancário',
+        colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
+      };
+    case 'a_vista':
+      return {
+        label: 'À vista',
+        details: 'Dinheiro / Transferência',
+        colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      };
+    default:
+      return {
+        label: PAYMENT_METHOD_LABELS[order.paymentMethod] || 'Pagamento',
+        colorClass: 'bg-slate-50 text-slate-600 border-slate-200',
+      };
+  }
+}
+

@@ -148,6 +148,9 @@ export default function App() {
   const activeOrdersCount = orders.filter((o) => o.status !== 'concluido').length;
   const pendingOrdersCount = orders.filter((o) => o.status === 'orcamento').length;
 
+  // State for navigating directly to a specific finance detail balloon
+  const [financeDetailTarget, setFinanceDetailTarget] = useState<'receita' | 'gastos' | 'lucro' | null>(null);
+
   return (
     <div className="min-h-screen bg-slate-200/60 flex justify-center items-start text-slate-800 antialiased selection:bg-rose-100">
       {/* Splash Screen on Launch */}
@@ -182,6 +185,7 @@ export default function App() {
               onNavigateTab={setCurrentTab}
               onNewOrder={() => setCurrentTab('pedidos')}
               onNewExpense={() => setCurrentTab('financas')}
+              onOpenFinanceDetail={(detail) => setFinanceDetailTarget(detail)}
             />
           )}
 
@@ -193,6 +197,8 @@ export default function App() {
               onPeriodChange={setPeriod}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
+              initialKpiDetail={financeDetailTarget}
+              onClearInitialKpiDetail={() => setFinanceDetailTarget(null)}
             />
           )}
 

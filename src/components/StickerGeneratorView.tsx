@@ -9,6 +9,12 @@ import {
   Camera,
   RotateCcw,
   Palette,
+  Share2,
+  Copy,
+  Info,
+  X,
+  ExternalLink,
+  Smartphone,
 } from 'lucide-react';
 import { generateInfantArt } from '../utils/aiArtGenerator.ts';
 
@@ -39,6 +45,10 @@ export const StickerGeneratorView: React.FC = () => {
   const [customSubtext, setCustomSubtext] = useState(PRESET_MESSAGES[0].subtext);
   const [themeColor, setThemeColor] = useState<'pink' | 'turquoise' | 'yellow'>('pink');
   const [isDownloaded, setIsDownloaded] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [showSavedModal, setShowSavedModal] = useState(false);
+  const [savedPreviewUrl, setSavedPreviewUrl] = useState<string>('');
+  const [statusFeedback, setStatusFeedback] = useState<string>('');
 
   // Central Artwork Mode: Logo, AI Infant Art, or Gallery Upload
   const [artMode, setArtMode] = useState<ArtMode>('logo');
@@ -201,18 +211,89 @@ export const StickerGeneratorView: React.FC = () => {
     setCustomSubtext(PRESET_MESSAGES[idx].subtext);
   };
 
-  const handleDownloadSticker = () => {
+  const handleSaveToIPhone = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const dataUrl = canvas.toDataURL('image/png');
+    setSavedPreviewUrl(dataUrl);
+
+    // 1. Check if native Web Share with files is supported (Standard in modern iOS Safari)
+    if (navigator.share) {
+      try {
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, 'image/png')
+        );
+        if (blob) {
+          const filename = `figurinha-festa-com-alegria-${Date.now()}.png`;
+          const file = new File([blob], filename, { type: 'image/png' });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Figurinha Ateliê Festa com alegria',
+              text: 'Figurinha para WhatsApp 🎈',
+            });
+            setIsDownloaded(true);
+            setStatusFeedback('Menu do iPhone aberto! Toque em "Salvar Imagem" para guardar no Fotos.');
+            setTimeout(() => {
+              setIsDownloaded(false);
+              setStatusFeedback('');
+            }, 4000);
+            return;
+          }
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.warn('Web Share failed, using visual modal fallback:', err);
+        }
+      }
+    }
+
+    // 2. Direct browser link download trigger
     const link = document.createElement('a');
     link.download = `figurinha-festa-com-alegria-${Date.now()}.png`;
     link.href = dataUrl;
     link.click();
 
+    // 3. Open dedicated visual modal so iPhone users can touch & hold "Salvar em Fotos"
+    setShowSavedModal(true);
     setIsDownloaded(true);
-    setTimeout(() => setIsDownloaded(false), 3000);
+    setStatusFeedback('Figurinha pronta! Toque e segure na imagem para salvar no Fotos.');
+    setTimeout(() => {
+      setIsDownloaded(false);
+      setStatusFeedback('');
+    }, 4000);
+  };
+
+  const handleCopySticker = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    try {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/png')
+      );
+      if (blob && navigator.clipboard && (window as any).ClipboardItem) {
+        await navigator.clipboard.write([
+          new (window as any).ClipboardItem({ 'image/png': blob }),
+        ]);
+        setIsCopied(true);
+        setStatusFeedback('Copiado para o iPhone! Abra o WhatsApp e toque em Colar na conversa.');
+        setTimeout(() => {
+          setIsCopied(false);
+          setStatusFeedback('');
+        }, 4000);
+        return;
+      }
+    } catch (err) {
+      console.warn('Clipboard write failed:', err);
+    }
+
+    // If clipboard fails, open the modal with the image to long press
+    const dataUrl = canvas.toDataURL('image/png');
+    setSavedPreviewUrl(dataUrl);
+    setShowSavedModal(true);
   };
 
   return (
@@ -440,36 +521,198 @@ export const StickerGeneratorView: React.FC = () => {
         </div>
       </div>
 
-      {/* Download Action Button */}
+      {/* Real-time Status Feedback Banner */}
+      {statusFeedback && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl p-3 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200 shadow-xs">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{statusFeedback}</span>
+        </div>
+      )}
+
+      {/* Main Action Buttons Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {/* Primary Save Button (Triggers iOS Native Share Sheet / Photos) */}
+        <button
+          type="button"
+          onClick={handleSaveToIPhone}
+          className="w-full min-h-[50px] bg-gradient-to-r from-[#FF4B93] via-[#FF6B8B] to-[#FFBF1A] hover:opacity-95 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-lg shadow-rose-300/40 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-all"
+        >
+          {isDownloaded ? (
+            <>
+              <Check className="w-4 h-4" />
+              <span>Menu do iPhone Aberto!</span>
+            </>
+          ) : (
+            <>
+              <Share2 className="w-4 h-4" />
+              <span>Salvar no Fotos / Compartilhar</span>
+            </>
+          )}
+        </button>
+
+        {/* Secondary Copy Button (Quick Paste in WhatsApp) */}
+        <button
+          type="button"
+          onClick={handleCopySticker}
+          className="w-full min-h-[50px] bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm rounded-2xl border-2 border-rose-200 shadow-sm flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-all"
+        >
+          {isCopied ? (
+            <>
+              <Check className="w-4 h-4 text-emerald-600" />
+              <span className="text-emerald-700">Copiado para o iPhone!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-4 h-4 text-[#FF4B93]" />
+              <span>Copiar para WhatsApp</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Quick Visual Helper Button */}
       <button
-        onClick={handleDownloadSticker}
-        className="w-full min-h-[50px] bg-gradient-to-r from-[#FF4B93] via-[#FF6B8B] to-[#FFBF1A] hover:opacity-95 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-lg shadow-rose-300/50 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-all"
+        type="button"
+        onClick={() => {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            setSavedPreviewUrl(canvas.toDataURL('image/png'));
+          }
+          setShowSavedModal(true);
+        }}
+        className="w-full min-h-[44px] bg-rose-50 hover:bg-rose-100/70 text-[#FF4B93] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all border border-rose-200/60"
       >
-        {isDownloaded ? (
-          <>
-            <Check className="w-4 h-4" />
-            <span>Figurinha Salva na Galeria!</span>
-          </>
-        ) : (
-          <>
-            <Download className="w-4 h-4" />
-            <span>Salvar Figurinha no iPhone (PNG)</span>
-          </>
-        )}
+        <Smartphone className="w-4 h-4 text-[#FF4B93]" />
+        <span>Abrir Imagem para Segurar & Salvar no Fotos</span>
       </button>
 
-      {/* Tip Box */}
-      <div className="bg-rose-50/70 border border-rose-100 rounded-2xl p-3.5 text-xs text-slate-600 space-y-1">
-        <p className="font-semibold text-slate-800 flex items-center gap-1">
-          <Heart className="w-3.5 h-3.5 text-[#FF4B93] fill-[#FF4B93]" />
-          Como adicionar no WhatsApp do seu iPhone:
-        </p>
-        <ol className="list-decimal list-inside text-[11px] text-slate-500 space-y-0.5">
-          <li>Clique no botão acima para salvar a imagem transparente no seu iPhone.</li>
-          <li>Abra o WhatsApp ou o app "Sticker.ly" e adicione a imagem ao seu pacote de figurinhas do Ateliê.</li>
-          <li>Envie nas conversas com suas clientes para encantar ainda mais!</li>
-        </ol>
+      {/* Detailed Clear Guide Cards: Onde fica salvo & Como importar para o WhatsApp */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3.5">
+        {/* Where is it saved */}
+        <div className="flex items-start gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <Smartphone className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-800">
+              📍 Onde a figurinha fica salva no iPhone?
+            </h4>
+            <p className="text-[11px] text-slate-600 leading-relaxed mt-0.5">
+              Ao clicar no botão <strong>"Salvar no Fotos / Compartilhar"</strong> e escolher <strong>"Salvar Imagem"</strong>, ela fica guardada diretamente no aplicativo <strong>Fotos (Galeria)</strong> do iPhone, na aba <strong>Biblioteca / Recentes</strong>, em formato transparente PNG.
+            </p>
+          </div>
+        </div>
+
+        {/* How to import into WhatsApp */}
+        <div className="flex items-start gap-2.5 pt-2 border-t border-slate-100">
+          <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+            <Smile className="w-4 h-4" />
+          </div>
+          <div className="space-y-1.5 flex-1">
+            <h4 className="text-xs font-bold text-slate-800">
+              💬 Como importar para o WhatsApp no iPhone (2 formas):
+            </h4>
+            <div className="bg-slate-50 rounded-xl p-2.5 text-[11px] text-slate-600 space-y-1.5 border border-slate-100">
+              <p>
+                <strong>Forma 1 (Criador oficial do WhatsApp):</strong>
+                <br />
+                1. Abra qualquer conversa no WhatsApp no seu iPhone.
+                <br />
+                2. No campo de digitar texto, toque no ícone de <strong>Figurinha</strong> (ao lado da câmera).
+                <br />
+                3. Toque no botão <strong>"Criar"</strong> (ou no símbolo <strong>+</strong>).
+                <br />
+                4. Selecione a figurinha da sua galeria Fotos. O WhatsApp já recortará e salvará nos seus favoritos!
+              </p>
+              <div className="border-t border-slate-200/80 pt-1.5">
+                <p>
+                  <strong>Forma 2 (Copiar e Colar direto):</strong>
+                  <br />
+                  1. Toque em <strong>"Copiar para WhatsApp"</strong> aqui no app.
+                  <br />
+                  2. Abra o WhatsApp, toque e segure no campo de mensagem e escolha <strong>"Colar"</strong>.
+                  <br />
+                  3. O WhatsApp perguntará se deseja enviar como figurinha!
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Dedicated Visual Modal for iPhone Manual Save (Touch & Hold) */}
+      {showSavedModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-rose-100 space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-[#FF4B93]" />
+                <h3 className="text-sm font-bold text-slate-800">
+                  Salvar no Fotos do iPhone
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSavedModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Visual Instruction Badge */}
+            <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-3 text-center space-y-1">
+              <span className="text-xs font-black text-[#FF4B93] block">
+                👆 Dica de ouro para iPhone:
+              </span>
+              <p className="text-xs font-semibold text-slate-700">
+                Toque e <strong>segure o dedo</strong> sobre a imagem abaixo por 1 segundo e selecione <strong>"Salvar em Fotos"</strong>!
+              </p>
+            </div>
+
+            {/* The Actual Rendered Sticker Image (Safari native touch target) */}
+            <div className="flex items-center justify-center py-2 bg-gradient-to-b from-slate-50 to-slate-100 rounded-2xl border border-slate-200/70 p-4">
+              {savedPreviewUrl && (
+                <img
+                  src={savedPreviewUrl}
+                  alt="Figurinha Ateliê Festa com alegria"
+                  className="w-56 h-56 object-contain drop-shadow-xl select-auto active:scale-98 transition-transform"
+                />
+              )}
+            </div>
+
+            {/* Quick Actions inside modal */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleSaveToIPhone}
+                className="w-full min-h-[44px] bg-[#FF4B93] hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Abrir Menu Compartilhar do iPhone</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopySticker}
+                className="w-full min-h-[44px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Copy className="w-4 h-4" />
+                <span>Copiar Imagem para o Teclado</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSavedModal(false)}
+                className="w-full min-h-[40px] text-slate-500 hover:text-slate-700 font-semibold text-xs flex items-center justify-center cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

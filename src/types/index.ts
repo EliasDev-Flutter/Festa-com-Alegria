@@ -1,5 +1,20 @@
 export type OrderStatus = 'orcamento' | 'confirmado' | 'em_preparacao' | 'concluido';
 
+export type PaymentMethod =
+  | 'cartao_credito'
+  | 'debito'
+  | 'pix'
+  | 'boleto'
+  | 'cinquenta_porcento'
+  | 'a_vista';
+
+export interface SplitMonthsPayment {
+  firstMonth: string; // Ex: "Novembro"
+  secondMonth: string; // Ex: "Dezembro"
+  firstMonthPaid?: boolean;
+  secondMonthPaid?: boolean;
+}
+
 export interface Order {
   id: string;
   clientName: string;
@@ -11,6 +26,9 @@ export interface Order {
   value: number; // Valor Total
   materialCost: number; // Custo estimado com materiais
   status: OrderStatus;
+  paymentMethod?: PaymentMethod;
+  installments?: number; // Para Cartão de Crédito (1x a 12x)
+  splitMonths?: SplitMonthsPayment; // Para 50%
   notes?: string;
   createdAt: string;
 }
@@ -75,6 +93,9 @@ export interface ParsedWhatsAppOrder {
   location: string;
   value: number;
   clientPhone: string;
+  paymentMethod?: PaymentMethod;
+  installments?: number;
+  splitMonths?: SplitMonthsPayment;
   notes: string;
   confidence: number;
 }
